@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jeopardy Board — Career Edition</title>
+<style>
+  :root{
+    --bg:#0b1e3a;
+    --board:#0e2a57;
+    --tile:#154a9b;
+    --tile-hover:#1b5fca;
+    --used:#0a3570;
+    --text:#f8f8f8;
+    --accent:#ffd400;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:system-ui, sans-serif;
+    background: radial-gradient(1200px 700px at 50% -10%, #163a77 0%, var(--bg) 55%, #07162b 100%);
+    color:var(--text);
+    display:flex; flex-direction:column; gap:16px; min-height:100vh;
+  }
+  header{ text-align:center; padding:16px 12px 0; }
+  h1{margin:0; font-size:clamp(22px,3.2vw,34px)}
+  .board-wrap{padding:12px; width:100%; max-width:1200px; margin:0 auto; flex:1; display:flex}
+  .board{
+    display:grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-auto-rows:minmax(62px, 1fr);
+    gap:8px; width:100%; padding:8px;
+    border-radius:18px; box-shadow:0 10px 30px #0007;
+  }
+  .cell{
+    background:var(--tile);
+    border-radius:12px;
+    display:flex; align-items:center; justify-content:center;
+    text-align:center; padding:8px; user-select:none;
+  }
+  .cell.header{
+    background:#0a3a83; font-weight:700; text-transform:uppercase;
+    font-size:clamp(12px,1.5vw,14px);
+  }
+  .cell.value{
+    cursor:pointer; font-weight:800; color:var(--accent);
+    font-size:clamp(18px,2.8vw,28px);
+  }
+  .cell.value:hover{ background:var(--tile-hover); }
+  .cell.value.used{ background:var(--used); color:#ccc; cursor:not-allowed; }
+  .modal-backdrop{
+    position:fixed; inset:0; background:#000a; display:none;
+    align-items:center; justify-content:center; padding:18px; z-index:1000;
+  }
+  .modal-backdrop.show{ display:flex; }
+  .modal{
+    background:#0a1f3f; color:var(--text);
+    width:min(900px, 96vw); border-radius:18px; padding:22px;
+  }
+  .modal h2{ margin:0 0 8px 0; }
+  .q-text{ 
+    font-size:clamp(20px,2.4vw,28px); 
+    margin:8px 0 18px 0; 
+    white-space: pre-line;
+  }
+  .answer-text{
+    margin-top:12px;
+    padding:10px;
+    border-radius:10px;
+    background:#123d72;
+    font-weight:600;
+    color:var(--accent);
+    display:none;
+  }
+  button{ border:none; padding:10px 14px; border-radius:12px; font-weight:700; cursor:pointer;
+    background:#164aa0; color:#fff; }
+  button:hover{ filter:brightness(1.12) }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Jeopardy — Career Quiz</h1>
+    <div>Click a tile to reveal a question</div>
+  </header>
+
+  <div class="board-wrap">
+    <div id="board" class="board"></div>
+  </div>
+
+  <div id="backdrop" class="modal-backdrop">
+    <div class="modal">
+      <h2 id="qTitle">Question</h2>
+      <div id="qMeta"></div>
+      <div id="qText" class="q-text"></div>
+      <div id="qAnswer" class="answer-text"></div>
+      <div style="margin-top:16px; display:flex; gap:10px;">
+        <button id="answerBtn">Answer</button>
+        <button id="closeBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+// Topics
+const topics = [
+  "Career Mythbusters",
+  "Job Jargon",
+  "Law",
+  "Education",
+  "Tools of Trade",
+  "Workplace Wonders",
+  "National Services",
+  "Sports"
+];
+
+// 8 values
+const values = [50000,100000,150000,200000,250000,300000,350000,400000];
+
+// Questions (Q & A)
+const questions = [
+  // Career Mythbusters
+  [
+    {q:"True or False: A high salary always equals high job satisfaction.", a:"False"},
+    {q:"Can people have successful careers without a college degree?", a:"Yes"},
+    {q:"Is 'All creative careers are unstable' a Myth or Fact?", a:"Myth"},
+    {q:"Which is often wrongly assumed about leadership careers?\n a) Only people with formal titles can lead\n b) Emotional intelligence matters\n c) Leaders can emerge at any career stage\n d) Collaboration strengthens leadership impact", a:"a) Only people with formal titles can lead"},
+    {q:"Which career is often thought to end after age 30, but many continue beyond?", a:"Sports"},
+    {q:"Which of these is misunderstood as unstable but actually growing?\n a) Data Analyst\n b) Graphic Designer\n c) Civil Engineer\n d) Teacher", a:"b) Graphic Designer"},
+    {q:"Which statement is a fact?\n a) Success depends only on IQ\n b) Introverts can excel in leadership roles\n c) Changing careers is always a failure\n d) Only young can start businesses", a:"b) Introverts can excel in leadership roles"},
+    {q:"Which is the biggest myth?\n a) Govt jobs are the only secure option\n b) Networking improves opportunities\n c) Skills matter more than degrees\n d) Remote work is widespread\n e) Lifelong learning is essential", a:"a) Govt jobs are the only secure option"}
+  ],
+  // Job Jargon
+  [
+    {q:"True or False: '9 to 5' means a standard office schedule.", a:"True"},
+    {q:"What does HR stand for?", a:"Human Resources"},
+    {q:"Unscramble: RKEOWNTEGN", a:"Networking"},
+    {q:"What does 'burnout' mean?\n a) Vacation leave\n b) Lack of motivation\n c) Extreme work stress\n d) Promotion delay", a:"c) Extreme work stress"},
+    {q:"What does 'gig' usually mean?", a:"Short-term job / Freelance work"},
+    {q:"Which jargon is for the summary at the top of a CV?\n a) Cover Letter\n b) Resume Objective\n c) References\n d) Portfolio", a:"b) Resume Objective"},
+    {q:"Which is NOT common jargon?\n a) KPI\n b) ROI\n c) ASAP\n d) DNA", a:"d) DNA"},
+    {q:"What is the 'Glass Ceiling'?\n a) Office design\n b) Limit due to lack of skills\n c) Invisible barrier blocking advancement\n d) Salary cap\n e) Job security", a:"c) Invisible barrier blocking advancement"}
+  ],
+  // Law
+  [
+    {q:"True or False: In India, lawyers must be registered with the Bar Council.", a:"True"},
+    {q:"Title of a lawyer who argues cases in higher courts?", a:"Advocate"},
+    {q:"What is the highest court of appeal in India?", a:"Supreme Court"},
+    {q:"True or False: IPC was introduced in 1860.", a:"True"},
+    {q:"Which article guarantees Right to Constitutional Remedies?\n a) 32\n b) 14\n c) 19\n d) 370", a:"a) 32"},
+    {q:"Which is NOT part of Directive Principles?\n a) Equal pay\n b) Peace\n c) Freedom of speech\n d) Protection of monuments", a:"c) Freedom of speech"},
+    {q:"Which is NOT a Fundamental Duty?\n a) Respect flag\n b) Protect environment\n c) Pay income tax\n d) Safeguard property", a:"c) Pay income tax"},
+    {q:"Which writ directs authority to perform duty?\n a) Habeas Corpus\n b) Certiorari\n c) Mandamus\n d) Quo Warranto\n e) Prohibition", a:"c) Mandamus"}
+  ],
+  // Education
+  [
+    {q:"True or False: Internships are practical education.", a:"True"},
+    {q:"Full form of MBA?", a:"Master of Business Administration"},
+    {q:"Which exam is the gateway to medical careers in India?", a:"NEET"},
+    {q:"Which is a vocational course?\n a) Carpentry\n b) Political Science\n c) Physics\n d) History", a:"a) Carpentry"},
+    {q:"Which test is needed to study abroad in English countries?", a:"IELTS / TOEFL"},
+    {q:"Which exam is for MBA admissions abroad?\n a) UPSC\n b) GRE/GMAT\n c) IIT-JEE\n d) CLAT", a:"b) GRE/GMAT"},
+    {q:"Which degree is most common among startup founders?\n a) Engineering\n b) Medicine\n c) Fine Arts\n d) Political Science", a:"a) Engineering"},
+    {q:"Which qualification is vital in finance careers?\n a) CFA\n b) PhD Physics\n c) MBBS\n d) B.Arch\n e) UPSC", a:"a) CFA"}
+  ],
+  // Tools of Trade
+  [
+    {q:"True or False: A chef’s main tool is a scalpel.", a:"False"},
+    {q:"What tool does a carpenter use to cut wood?", a:"Saw"},
+    {q:"Which tool is used by an architect to design?", a:"CAD"},
+    {q:"Who uses a trowel?\n a) Chef\n b) Mason\n c) Farmer\n d) Dentist", a:"b) Mason"},
+    {q:"Which tool is used by a writer in the digital age?", a:"Keyboard"},
+    {q:"Who uses a sphygmomanometer?\n a) Nurse\n b) Lawyer\n c) Architect\n d) Engineer", a:"a) Nurse"},
+    {q:"Which is NOT correct?\n a) Musician–Tuning Fork\n b) Surveyor–Theodolite\n c) Electrician–Oscilloscope\n d) Lawyer–Microscope", a:"d) Lawyer–Microscope"},
+    {q:"Who uses an EEG machine?\n a) Neurologist\n b) Psychiatrist\n c) Cardiologist\n d) Endocrinologist\n e) Orthopedic", a:"a) Neurologist"}
+  ],
+  // Workplace Wonders
+  [
+    {q:"True or False: Google HQ is called the Googleplex.", a:"True"},
+    {q:"Which company has a spaceship-like HQ in Cupertino?", a:"Apple"},
+    {q:"Which car company’s workplace is the 'Glass Factory'?", a:"Volkswagen"},
+    {q:"Which company introduced nap pods?\n a) Samsung\n b) Google\n c) Apple\n d) Tesla", a:"b) Google"},
+    {q:"Which Japanese practice means continuous improvement?", a:"Kaizen"},
+    {q:"Which company has 'two-pizza team rule'?\n a) Amazon\n b) IBM\n c) Tesla\n d) Infosys", a:"a) Amazon"},
+    {q:"Which company’s Sweden office looks like a pirate ship?\n a) King\n b) Spotify\n c) IKEA\n d) Mojang", a:"a) King"},
+    {q:"Which company has slides in some offices?\n a) LEGO\n b) Google\n c) Facebook\n d) Amazon\n e) Pixar", a:"b) Google"}
+  ],
+  // National Services
+  [
+    {q:"True or False: Indian Army is the largest Armed Force.", a:"True"},
+    {q:"Minimum rank of commissioned officer in Indian Army?", a:"Lieutenant"},
+    {q:"What is the official motto of the Indian Army?", a:"Service"},
+    {q:"Air Force motto?\n a) Service Before Self\n b) Touch the Sky with Glory\n c) Always Alert\n d) Jai Jawan, Jai Kisan", a:"b) Touch the Sky with Glory"},
+    {q:"Which academy trains cadets for all 3 services?", a:"NDA"},
+    {q:"Which is NOT a branch of Armed Forces?\n a) Coast Guard\n b) Navy\n c) Army\n d) Police Service", a:"d) Police Service"},
+    {q:"Which operation in 1971 India-Pak war?\n a) Meghdoot\n b) Vijay\n c) Trident\n d) Shakti", a:"c) Trident"},
+    {q:"Highest rank in Indian Air Force?\n a) Air Vice Marshal\n b) Air Marshal\n c) Air Commodore\n d) Wing Commander\n e) Air Chief Marshal", a:"e) Air Chief Marshal"}
+  ],
+  // Sports
+  [
+    {q:"True or False: Cricket is in the Summer Olympics.", a:"False"},
+    {q:"Checkmate possible with King + Bishop only? (Yes/No)", a:"No"},
+    {q:"Which sport uses the term 'birdie'?", a:"Golf"},
+    {q:"Which sport uses 'love' in scoring?\n a) Badminton\n b) Squash\n c) Tennis\n d) Table Tennis", a:"c) Tennis"},
+    {q:"Which country has most FIFA World Cups?", a:"Brazil"},
+    {q:"Who is 'God of Football'?\n a) Maradona\n b) Ronaldo\n c) Messi\n d) Pele", a:"d) Pele"},
+    {q:"Which statement is correct?\n a) NBA is in Europe\n b) Ashes is India vs Pakistan\n c) Wimbledon is on grass\n d) F1 started in USA", a:"c) Wimbledon is on grass"},
+    {q:"Which Olympic event combines running, jumping, throwing?\n a) Decathlon\n b) Marathon\n c) Triathlon\n d) Pentathlon\n e) Heptathlon", a:"a) Decathlon"}
+  ]
+];
+
+const boardEl = document.getElementById("board");
+const backdrop = document.getElementById("backdrop");
+const qTitle = document.getElementById("qTitle");
+const qMeta  = document.getElementById("qMeta");
+const qText  = document.getElementById("qText");
+const qAnswer= document.getElementById("qAnswer");
+const closeBtn = document.getElementById("closeBtn");
+const answerBtn = document.getElementById("answerBtn");
+
+const used = new Set();
+
+function buildBoard(){
+  topics.forEach(topic => {
+    const h = document.createElement("div");
+    h.className = "cell header"; h.textContent = topic;
+    boardEl.appendChild(h);
+  });
+  for(let row=0; row<values.length; row++){
+    for(let col=0; col<topics.length; col++){
+      const val = values[row];
+      const cell = document.createElement("div");
+      cell.className = "cell value";
+      cell.textContent = `₹${val}`;
+      cell.dataset.col=col; cell.dataset.row=row;
+      cell.onclick=()=>openQuestion(col,row,cell);
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+function openQuestion(col,row,cell){
+  const k=`${col}-${row}`;
+  if(used.has(k)) return;
+  const topic=topics[col];
+  const value=values[row];
+  const data=questions[col][row];
+  qTitle.textContent="Question";
+  qMeta.textContent=`${topic} — ₹${value}`;
+  qText.textContent=data.q;
+  qAnswer.style.display="none";
+  qAnswer.textContent=""; 
+  answerBtn.style.display="inline-block";
+  answerBtn.onclick=()=>{
+    qAnswer.textContent="Answer: " + data.a;
+    qAnswer.style.display="block";
+    answerBtn.style.display="none";
+  }
+  backdrop.classList.add("show");
+  used.add(k); cell.classList.add("used"); cell.textContent="—";
+}
+
+closeBtn.onclick=()=>backdrop.classList.remove("show");
+backdrop.onclick=(e)=>{ if(e.target===backdrop) backdrop.classList.remove("show"); };
+document.onkeydown=(e)=>{ if(e.key==="Escape") backdrop.classList.remove("show"); };
+
+buildBoard();
+</script>
+</body>
+</html>
